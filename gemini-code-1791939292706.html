@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>校園幾何迷宮 - 角的認識</title>
+<style>
+    body {
+        margin: 0; padding: 0; background-color: #1a252c;
+        display: flex; justify-content: center; align-items: center;
+        height: 100vh; overflow: hidden; font-family: 'Comic Sans MS', '微軟正黑體', sans-serif;
+        touch-action: none; /* 防止平板滑動 */
+    }
+    #game-container {
+        position: relative; width: 1024px; height: 768px;
+        background: #000; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        overflow: hidden; transform-origin: center center;
+    }
+    .screen {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        display: none; flex-direction: column; justify-content: center; align-items: center;
+    }
+    .active { display: flex; }
+    
+    /* === 主畫面設計 === */
+    #main-menu { background: linear-gradient(135deg, #f1c40f, #e67e22); z-index: 300; }
+    h1 { font-size: 72px; color: #fff; text-shadow: 4px 4px 0 #d35400; margin-bottom: 20px; }
+    .btn {
+        background: #e74c3c; color: #fff; border: 4px solid #fff; border-radius: 15px;
+        padding: 15px 40px; font-size: 32px; cursor: pointer; margin: 10px;
+        font-weight: bold; transition: transform 0.2s; box-shadow: 0 5px 0 #c0392b;
+    }
+    .btn:active { transform: translateY(5px); box-shadow: 0 0 0 #c0392b; }
+    .btn-blue { background: #3498db; box-shadow: 0 5px 0 #2980b9; }
+    .btn-green { background: #2ecc71; box-shadow: 0 5px 0 #27ae60; }
+    .btn-gray { background: #7f8c8d; box-shadow: 0 5px 0 #2c3e50; }
+
+    /* === 規則視窗 === */
+    #rules-modal {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: #fff; border: 8px solid #2c3e50; border-radius: 20px;
+        padding: 30px; width: 80%; text-align: center; display: none; z-index: 400;
+    }
+    #rules-modal h2 { font-size: 40px; color: #e74c3c; margin-top: 0; }
+    #rules-modal p { font-size: 24px; line-height: 1.6; text-align: left; }
+    
+    /* === 學校走廊迷宮背景 (偽3D效果) === */
+    #corridor-view {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: #7f8c8d; /* 遠處牆面 */
+        z-index: 1;
+        transition: transform 1.2s ease-in, opacity 1.2s ease-in;
+    }
+    .c-ceiling { position: absolute; top: 0; left: 0; width: 100%; height: 25%; background: #ecf0f1; clip-path: polygon(0 0, 100% 0, 75% 100%, 25% 100%); }
+    .c-floor { position: absolute; bottom: 0; left: 0; width: 100%; height: 35%; background: #8d6e63; clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%); }
+    .c-wall-left { position: absolute; top: 0; left: 0; width: 25%; height: 100%; background: #bdc3c7; clip-path: polygon(0 0, 100% 25%, 100% 65%, 0 100%); border-right: 2px solid #95a5a6; }
+    .c-wall-right { position: absolute; top: 0; right: 0; width: 25%; height: 100%; background: #a6b2b4; clip-path: polygon(100% 0, 0 25%, 0 65%, 100% 100%); border-left: 2px solid #95a5a6; }
+    .c-door { position: absolute; top: 25%; left: 50%; width: 16%; height: 40%; background: #5d4037; transform: translateX(-50%); border: 4px solid #3e2723; }
+
+    /* === 遊戲 UI 與黑板 === */
+    #game-ui {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        z-index: 10;
+        transition: opacity 0.5s ease-out; /* 用於前進動畫時淡出黑板 */
+    }
+    #blackboard {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 860px; height: 580px;
+        background: #2b5329; /* 教室黑板綠 */
+        border: 20px solid #8a5a44; /* 木頭邊框 */
+        border-radius: 12px;
+        box-shadow: 10px 10px 30px rgba(0,0,0,0.6), inset 0 0 50px rgba(0,0,0,0.4);
+    }
+
+    #level-info { position: absolute; top: 15px; left: 25px; font-size: 28px; font-weight: bold; color: #f1c40f; text-shadow: 2px 2px 0 #000; }
+    #question-text { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 32px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+    
+    /* === 角度顯示 === */
+    #angle-display {
+        position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%);
+        width: 380px; height: 380px; display: flex; justify-content: center; align-items: center;
+    }
+    .svg-angle { width: 100%; height: 100%; filter: drop-shadow(3px 3px 2px rgba(0,0,0,0.5)); }
+
+    /* === 工具列 (旋轉按鈕) === */
+    #tools-area { position: absolute; left: 20px; bottom: 30px; display: flex; gap: 15px; flex-direction: column; }
+    .tool-btn {
+        background: #1abc9c; color: white; border: 3px solid #16a085; border-radius: 10px;
+        width: 80px; height: 80px; font-size: 40px; cursor: pointer; box-shadow: 0 5px 0 #0d836c;
+        user-select: none; /* 防止長按反白文字 */
+    }
+    .tool-btn:active { transform: translateY(5px); box-shadow: 0 0 0 #0d836c; }
+    .tool-hint { position: absolute; bottom: -25px; left: 5px; color: #fff; font-size: 14px; white-space: nowrap; }
+
+    /* === 可拖曳透明直尺 === */
+    #ruler {
+        position: absolute; top: 60%; left: 75%; width: 160px; height: 160px;
+        background: rgba(255, 235, 59, 0.4);
+        border-left: 8px solid #e74c3c; border-bottom: 8px solid #e74c3c;
+        border-top: 2px solid rgba(255,255,255,0.3); border-right: 2px solid rgba(255,255,255,0.3);
+        cursor: grab; z-index: 50; display: flex; justify-content: flex-end; align-items: flex-start;
+        padding: 5px; font-size: 20px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px #000;
+        box-shadow: 3px 3px 10px rgba(0,0,0,0.3);
+    }
+    #ruler:active { cursor: grabbing; }
+    #ruler-origin { position: absolute; bottom: -4px; left: -4px; width: 12px; height: 12px; background: red; border-radius: 50%; border: 2px solid white; }
+
+    /* === 答案選項 (修復單行顯示) === */
+    #answers-area {
+        position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 20px; flex-wrap: nowrap; /* 確保不換行 */
+    }
+    .ans-btn {
+        background: #ecf0f1; color: #2c3e50; border: 4px solid #bdc3c7; border-radius: 15px;
+        padding: 15px 30px; font-size: 30px; font-weight: bold; cursor: pointer;
+        box-shadow: 0 6px 0 #95a5a6;
+        white-space: nowrap; /* 強制文字在同一行 */
+        min-width: 170px;
+        flex-shrink: 0;
+    }
+    .ans-btn:active { transform: translateY(6px); box-shadow: 0 0 0 #95a5a6; }
+    .ans-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* === 反饋彈跳視窗 === */
+    #feedback-overlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.75); display: none; justify-content: center; align-items: center; z-index: 200;
+    }
+    #feedback-box {
+        background: #fff; padding: 40px; border-radius: 20px; text-align: center;
+        width: 65%; font-size: 34px; font-weight: bold; border: 6px solid #f1c40f;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    #feedback-btn { margin-top: 30px; }
+
+    /* === 密碼鎖視窗 (中途控管) === */
+    #password-screen {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(44, 62, 80, 0.95); display: none; flex-direction: column; 
+        justify-content: center; align-items: center; z-index: 250;
+    }
+    .lock-box {
+        background: #ecf0f1; padding: 40px; border-radius: 20px; text-align: center;
+        border: 8px solid #34495e; box-shadow: 0 15px 40px rgba(0,0,0,0.7);
+        width: 500px;
+    }
+    .lock-box h2 { color: #c0392b; font-size: 36px; margin-top: 0; }
+    .lock-box p { font-size: 22px; color: #2c3e50; font-weight: bold; }
+    #pwd-display {
+        font-size: 48px; letter-spacing: 15px; font-weight: bold; color: #2980b9;
+        background: #fff; border: 4px solid #bdc3c7; border-radius: 10px;
+        padding: 10px; margin: 20px 0; min-height: 60px;
+    }
+    .keypad {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;
+    }
+    .key-btn {
+        background: #34495e; color: #fff; font-size: 32px; font-weight: bold;
+        border: none; border-radius: 10px; padding: 15px 0; cursor: pointer;
+        box-shadow: 0 4px 0 #2c3e50;
+    }
+    .key-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #2c3e50; }
+    .key-btn.action { background: #e67e22; box-shadow: 0 4px 0 #d35400; }
+    .key-btn.action:active { box-shadow: 0 0 0 #d35400; }
+    .key-btn.submit { background: #27ae60; box-shadow: 0 4px 0 #2ecc71; grid-column: span 3; }
+    .key-btn.submit:active { box-shadow: 0 0 0 #2ecc71; }
+
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- 主畫面 -->
+    <div id="main-menu" class="screen active">
+        <h1>校園幾何迷宮 🏫</h1>
+        <button class="btn btn-blue" onclick="startGame()">開始迷宮探險</button>
+        <button class="btn" onclick="showRules()">遊戲規則</button>
+        <button class="btn btn-green" onclick="toggleFullScreen()">全螢幕遊玩</button>
+    </div>
+
+    <!-- 規則說明 -->
+    <div id="rules-modal">
+        <h2>📜 探險規則</h2>
+        <p>1. 走廊迷宮裡藏著「角精靈」，你要分辨它是<b>銳角、直角還是鈍角</b>！答對才能前進。<br>
+           2. 遇到歪歪斜斜的角，<b>長按</b>左下方的 <b>【旋轉按鈕 ↺ ↻】</b> 可以精準微調把它轉平。<br>
+           3. 拖曳畫面上的黃色 <b>【透明直角尺 📐】</b>，把紅點對準角的頂點量一量。<br>
+           比直角小 ➡️ 銳角 | 一模一樣 ➡️ 直角 | 比直角大 ➡️ 鈍角</p>
+        <button class="btn" onclick="hideRules()">我知道了！</button>
+    </div>
+
+    <!-- 遊戲畫面 -->
+    <div id="game-screen" class="screen">
+        
+        <!-- 背景走廊 (用於動畫) -->
+        <div id="corridor-view">
+            <div class="c-ceiling"></div>
+            <div class="c-floor"></div>
+            <div class="c-wall-left"></div>
+            <div class="c-wall-right"></div>
+            <div class="c-door"></div>
+        </div>
+
+        <!-- 遊戲互動 UI (黑板與工具) -->
+        <div id="game-ui">
+            <div id="blackboard">
+                <div id="level-info">走廊迷宮：第 1 / 12 關</div>
+                <div id="question-text">這隻精靈是什麼角呢？</div>
+                
+                <div id="angle-container" style="position:absolute; top:45%; left:50%; width:0; height:0;">
+                    <div id="angle-display" style="transform: translate(-50%, -50%) rotate(0deg);">
+                        <!-- SVG 將注入於此 -->
+                    </div>
+                </div>
+
+                <div id="tools-area">
+                    <button class="tool-btn" onpointerdown="startRotate(-1)" onpointerup="stopRotate()" onpointerleave="stopRotate()">↺</button>
+                    <button class="tool-btn" onpointerdown="startRotate(1)" onpointerup="stopRotate()" onpointerleave="stopRotate()">↻</button>
+                    <div class="tool-hint">💡長按可連續旋轉</div>
+                </div>
+
+                <div id="answers-area">
+                    <button class="ans-btn" id="btn-a" onclick="checkAnswer('A')">A. 銳角</button>
+                    <button class="ans-btn" id="btn-b" onclick="checkAnswer('B')">B. 直角</button>
+                    <button class="ans-btn" id="btn-c" onclick="checkAnswer('C')">C. 鈍角</button>
+                </div>
+            </div>
+
+            <!-- 可拖曳直尺 -->
+            <div id="ruler">
+                <div id="ruler-origin"></div>
+                直尺 📐
+            </div>
+        </div>
+    </div>
+
+    <!-- 密碼鎖視窗 (在第7關前觸發) -->
+    <div id="password-screen">
+        <div class="lock-box">
+            <h2>🔒 走廊大門已上鎖</h2>
+            <p>請等待老師講解，並輸入 4 位數密碼解鎖</p>
+            <div id="pwd-display">_ _ _ _</div>
+            <div class="keypad">
+                <button class="key-btn" onclick="pressKey('1')">1</button>
+                <button class="key-btn" onclick="pressKey('2')">2</button>
+                <button class="key-btn" onclick="pressKey('3')">3</button>
+                <button class="key-btn" onclick="pressKey('4')">4</button>
+                <button class="key-btn" onclick="pressKey('5')">5</button>
+                <button class="key-btn" onclick="pressKey('6')">6</button>
+                <button class="key-btn" onclick="pressKey('7')">7</button>
+                <button class="key-btn" onclick="pressKey('8')">8</button>
+                <button class="key-btn" onclick="pressKey('9')">9</button>
+                <button class="key-btn action" onclick="clearKey()">清除</button>
+                <button class="key-btn" onclick="pressKey('0')">0</button>
+                <button class="key-btn action" onclick="removeLastKey()">倒退</button>
+                <button class="key-btn submit" onclick="submitPassword()">解鎖開門 🔓</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 答題反饋 -->
+    <div id="feedback-overlay">
+        <div id="feedback-box">
+            <div id="feedback-msg">太棒了！答對囉！</div>
+            <button class="btn btn-green" id="feedback-btn" onclick="nextAction()">繼續前進</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // === 螢幕響應式縮放 ===
+    function resizeGame() {
+        const container = document.getElementById('game-container');
+        const scale = Math.min(window.innerWidth / 1024, window.innerHeight / 768);
+        container.style.transform = `scale(${scale})`;
+    }
+    window.addEventListener('resize', resizeGame);
+    resizeGame();
+
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => { alert(`無法進入全螢幕`); });
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+        }
+    }
+
+    // === 選單與導航 ===
+    function showRules() { document.getElementById('rules-modal').style.display = 'block'; }
+    function hideRules() { document.getElementById('rules-modal').style.display = 'none'; }
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    // === 題目資料 (修復了第7與第8題的答案與提示) ===
+    const levels = [
+        { id: 1, type: 'angle', ans: 'B', svg: `<path d="M 200 100 L 200 300 L 350 300" stroke="#f39c12" stroke-width="15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`, hint: '試著把直角尺放在角上，兩邊會和尺完美重疊喔！' },
+        { id: 2, type: 'angle', ans: 'A', svg: `<path d="M 150 150 L 200 300 L 280 120" stroke="#e74c3c" stroke-width="15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`, hint: '用直角尺量量看，這個角躲在直角尺裡面，比直角小的是「銳角」。' },
+        { id: 3, type: 'angle', ans: 'B', svg: `<path d="M 150 250 L 250 150 L 350 250" stroke="#3498db" stroke-width="15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`, hint: '角歪歪的！長按旋轉按鈕把它轉平，再用尺量量看。' },
+        { id: 4, type: 'angle', ans: 'C', svg: `<path d="M 120 180 L 200 250 L 320 160" stroke="#e67e22" stroke-width="15" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`, hint: '這個角的一邊超出了直角尺的範圍！比直角大的是「鈍角」。' },
+        { id: 5, type: 'shape', ans: 'B', svg: `<rect x="100" y="100" width="200" height="200" stroke="#fff" stroke-width="8" fill="rgba(255,255,255,0.2)"/><path d="M 100 150 L 100 100 L 150 100" stroke="#e74c3c" stroke-width="12" fill="none"/>`, hint: '正方形的角放上直角尺，是不是完美貼合呀？' },
+        { id: 6, type: 'shape', ans: 'A', svg: `<polygon points="200,80 100,320 300,320" stroke="#fff" stroke-width="8" fill="rgba(255,255,255,0.2)"/><path d="M 180 128 L 200 80 L 220 128" stroke="#e74c3c" stroke-width="12" fill="none"/>`, hint: '最上面的角尖尖的，躲在直角尺裡面，所以是「銳角」喔！' },
+        
+        // ★ 修復 第7題 (平行四邊形的銳角) -> 答案改為 'A'
+        { id: 7, type: 'shape', ans: 'A', svg: `<polygon points="150,120 350,120 250,280 50,280" stroke="#fff" stroke-width="8" fill="rgba(255,255,255,0.2)"/><path d="M 310 180 L 350 120 L 290 120" stroke="#e74c3c" stroke-width="12" fill="none"/>`, hint: '這個角雖然在平行四邊形裡，但它躲在直角尺裡面，比直角小，是「銳角」喔！' },
+        
+        // ★ 修復 第8題 (倒梯形的鈍角) -> 答案改為 'C'
+        { id: 8, type: 'shape', ans: 'C', svg: `<polygon points="50,100 350,100 250,280 150,280" stroke="#fff" stroke-width="8" fill="rgba(255,255,255,0.2)"/><path d="M 210 280 L 250 280 L 290 210" stroke="#e74c3c" stroke-width="12" fill="none"/>`, hint: '這個倒梯形的角，張開得比直角尺還要大，所以它是「鈍角」！' },
+        
+        { id: 9, type: 'object', ans: 'B', svg: `<circle cx="200" cy="200" r="120" stroke="#fff" stroke-width="8" fill="#34495e"/><line x1="200" y1="200" x2="200" y2="100" stroke="#fff" stroke-width="8" stroke-linecap="round"/><line x1="200" y1="200" x2="270" y2="200" stroke="#e74c3c" stroke-width="8" stroke-linecap="round"/><circle cx="200" cy="200" r="8" fill="#fff"/>`, hint: '3點整的時候，時針和分針剛好形成一個完美的「直角」喔！' },
+        { id: 10, type: 'object', ans: 'A', svg: `<line x1="120" y1="120" x2="280" y2="280" stroke="#bdc3c7" stroke-width="12" stroke-linecap="round"/><line x1="150" y1="250" x2="280" y2="280" stroke="#e74c3c" stroke-width="12" stroke-linecap="round"/><circle cx="250" cy="250" r="10" fill="#2c3e50"/>`, hint: '剪刀張開的幅度比直角尺小，尖尖的，這是「銳角」。' },
+        { id: 11, type: 'object', ans: 'C', svg: `<path d="M 80 150 A 150 150 0 0 1 320 150 L 200 250 Z" stroke="#e74c3c" stroke-width="8" fill="rgba(231, 76, 60, 0.5)"/><line x1="200" y1="250" x2="80" y2="150" stroke="#fff" stroke-width="8"/><line x1="200" y1="250" x2="320" y2="150" stroke="#fff" stroke-width="8"/>`, hint: '扇子張開得好大，超過直角尺邊界，是「鈍角」喔！' },
+        { id: 12, type: 'object', ans: 'C', svg: `<polygon points="50,200 200,100 350,200 300,200 300,350 100,350 100,200" fill="rgba(255,255,255,0.3)" stroke="#fff" stroke-width="8"/><path d="M 120 150 L 200 100 L 280 150" stroke="#e74c3c" stroke-width="12" fill="none"/>`, hint: '屋頂很寬闊，用直尺量比直角還要大，是「鈍角」！' }
+    ];
+
+    let currentLevelIndex = 0;
+    let currentRotation = 0;
+    let answerState = null;
+    let isLevel7Locked = true; // 第7關控管變數
+    let enteredPassword = "";  // 當前輸入密碼
+
+    function startGame() {
+        currentLevelIndex = 0;
+        isLevel7Locked = true; // 每次新遊戲重置鎖定
+        showScreen('game-screen');
+        loadLevel();
+    }
+
+    function loadLevel() {
+        const level = levels[currentLevelIndex];
+        document.getElementById('level-info').innerText = `迷宮走廊：第 ${currentLevelIndex + 1} / 12 關`;
+        
+        currentRotation = 0;
+        updateRotation();
+        document.getElementById('angle-display').innerHTML = `<svg class="svg-angle" viewBox="0 0 400 400">${level.svg}</svg>`;
+        
+        // 重設按鈕與直尺
+        ['A', 'B', 'C'].forEach(ans => {
+            const btn = document.getElementById(`btn-${ans.toLowerCase()}`);
+            btn.disabled = false; btn.style.opacity = '1';
+        });
+        const ruler = document.getElementById('ruler');
+        ruler.style.left = '75%'; ruler.style.top = '65%';
+    }
+
+    // === 連續旋轉邏輯 (每次1度) ===
+    let rotateInterval;
+    function startRotate(deg) {
+        currentRotation += deg;
+        updateRotation();
+        rotateInterval = setInterval(() => {
+            currentRotation += deg;
+            updateRotation();
+        }, 30);
+    }
+    function stopRotate() { clearInterval(rotateInterval); }
+    function updateRotation() {
+        document.getElementById('angle-display').style.transform = `translate(-50%, -50%) rotate(${currentRotation}deg)`;
+    }
+
+    // === 密碼鎖邏輯 (控制第7關) ===
+    function showPasswordDoor() {
+        document.getElementById('password-screen').style.display = 'flex';
+        clearKey();
+    }
+    function updatePwdDisplay() {
+        let displayStr = enteredPassword.split('').join(' ');
+        while(displayStr.length < 7) { displayStr += ' _'; } // 補足底線格式
+        document.getElementById('pwd-display').innerText = displayStr.trim();
+    }
+    function pressKey(num) {
+        if(enteredPassword.length < 4) {
+            enteredPassword += num;
+            updatePwdDisplay();
+        }
+    }
+    function removeLastKey() {
+        enteredPassword = enteredPassword.slice(0, -1);
+        updatePwdDisplay();
+    }
+    function clearKey() {
+        enteredPassword = "";
+        updatePwdDisplay();
+    }
+    function submitPassword() {
+        if (enteredPassword === "8888") {
+            isLevel7Locked = false;
+            document.getElementById('password-screen').style.display = 'none';
+            // 解鎖成功後，載入第7關並淡入黑板
+            loadLevel();
+            document.getElementById('game-ui').style.opacity = '1';
+        } else {
+            alert("❌ 密碼錯誤！請輸入老師提供的 4 位數密碼。");
+            clearKey();
+        }
+    }
+
+    // === 答案檢查 ===
+    function checkAnswer(ans) {
+        const level = levels[currentLevelIndex];
+        const overlay = document.getElementById('feedback-overlay');
+        const msg = document.getElementById('feedback-msg');
+        const btn = document.getElementById('feedback-btn');
+
+        if (ans === level.ans) {
+            answerState = 'correct';
+            msg.innerHTML = "✨ 太棒了！完全正確！<br><span style='font-size:24px; color:#27ae60;'>點擊繼續，往走廊深處前進！</span>";
+            btn.innerText = "繼續前進";
+            btn.className = "btn btn-green";
+            overlay.style.display = 'flex';
+        } else {
+            answerState = 'wrong';
+            msg.innerHTML = `💦 哎呀，答錯了！<br><span style='font-size:24px; color:#e74c3c;'>小提示：${level.hint}</span>`;
+            btn.innerText = "再試一次";
+            btn.className = "btn btn-blue";
+            overlay.style.display = 'flex';
+            document.getElementById(`btn-${ans.toLowerCase()}`).disabled = true;
+        }
+    }
+
+    // === 穿梭走廊動畫特效與關卡控管 ===
+    function nextAction() {
+        document.getElementById('feedback-overlay').style.display = 'none';
+        
+        if (answerState === 'correct') {
+            currentLevelIndex++;
+            if (currentLevelIndex >= levels.length) {
+                alert("🎉 恭喜小探險家！你成功辨識了所有的角，走出了校園迷宮！");
+                showScreen('main-menu');
+            } else {
+                // 執行走廊穿梭動畫
+                const ui = document.getElementById('game-ui');
+                const corridor = document.getElementById('corridor-view');
+                
+                ui.style.opacity = '0'; // 黑板與工具淡出
+                corridor.style.transform = 'scale(3)'; // 走廊放大 (往前走效果)
+                
+                setTimeout(() => {
+                    // 動畫結束瞬間復原背景
+                    corridor.style.transition = 'none';
+                    corridor.style.transform = 'scale(1)';
+                    
+                    // ★ 檢查是否即將進入第7關 (Index為6) 且需要密碼 ★
+                    if (currentLevelIndex === 6 && isLevel7Locked) {
+                        showPasswordDoor();
+                    } else {
+                        loadLevel();
+                        ui.style.opacity = '1';
+                    }
+                    
+                    // 恢復背景的動畫設定
+                    setTimeout(() => { 
+                        corridor.style.transition = 'transform 1.2s ease-in, opacity 1.2s ease-in'; 
+                    }, 50);
+                }, 1000); // 1秒鐘的穿梭時間
+            }
+        }
+    }
+
+    // === 拖曳直尺邏輯 ===
+    const ruler = document.getElementById('ruler');
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    ruler.addEventListener('pointerdown', (e) => {
+        isDragging = true;
+        const rect = ruler.getBoundingClientRect();
+        const container = document.getElementById('game-container');
+        const scale = container.getBoundingClientRect().width / 1024;
+        offsetX = (e.clientX - rect.left) / scale;
+        offsetY = (e.clientY - rect.top) / scale;
+        ruler.setPointerCapture(e.pointerId);
+    });
+
+    ruler.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        const containerRect = document.getElementById('game-container').getBoundingClientRect();
+        const scale = containerRect.width / 1024;
+        let x = (e.clientX - containerRect.left) / scale - offsetX;
+        let y = (e.clientY - containerRect.top) / scale - offsetY;
+        
+        x = Math.max(0, Math.min(x, 1024 - 160));
+        y = Math.max(0, Math.min(y, 768 - 160));
+        ruler.style.left = x + 'px';
+        ruler.style.top = y + 'px';
+    });
+
+    ruler.addEventListener('pointerup', (e) => {
+        isDragging = false;
+        ruler.releasePointerCapture(e.pointerId);
+    });
+
+</script>
+
+</body>
+</html>
